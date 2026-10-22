@@ -1,34 +1,29 @@
-name: Terraform Operations
+
+name: Terraform AWS EKS
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: "Choose the Terraform operation to run"
+        description: "Choose a Terraform operation"
         required: true
         type: choice
         options:
           - init
           - plan
+          - apply
           - destroy
         default: plan
-      destroy_confirmation:
-        description: 'For destroy only, type DESTROY exactly. Leave blank for init/plan.'
-        required: false
-        type: string
-        default: ""
 
 permissions:
   contents: read
 
-# Prevent concurrent operations against the same Terraform state.
 concurrency:
   group: terraform-eks
   cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-1
-  TF_VERSION: "1.16.5"
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
 
@@ -39,16 +34,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ env.TF_VERSION }}
+          terraform_version: "1.16.5"
           terraform_wrapper: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -61,27 +56,29 @@ jobs:
         run: terraform init
 
       - name: Terraform Format Check
-        if: ${{ inputs.action == 'init' || inputs.action == 'plan' }}
+        if: ${{ inputs.action != 'destroy' }}
         run: terraform fmt -check -recursive
 
       - name: Terraform Validate
-        if: ${{ inputs.action == 'init' || inputs.action == 'plan' }}
+        if: ${{ inputs.action != 'destroy' }}
         run: terraform validate
 
       - name: Terraform Plan
-        if: ${{ inputs.action == 'plan' }}
-        run: terraform plan -no-color
+        if: ${{ inputs.action == 'plan' || inputs.action == 'apply' }}
+        run: terraform plan -input=false -out=tfplan
 
-      - name: Verify destroy confirmation
-        if: ${{ inputs.action == 'destroy' }}
-        env:
-          DESTROY_CONFIRMATION: ${{ inputs.destroy_confirmation }}
-        run: |
-          if [ "$DESTROY_CONFIRMATION" != "DESTROY" ]; then
-            echo "::error::Destroy was selected, but destroy_confirmation was not exactly DESTROY. No resources were destroyed."
-            exit 1
-          fi
+      - name: Upload Terraform Plan
+        if: ${{ inputs.action == 'plan' || inputs.action == 'apply' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: tfplan
+          retention-days: 1
+
+      - name: Terraform Apply
+        if: ${{ inputs.action == 'apply' }}
+        run: terraform apply -input=false -auto-approve tfplan
 
       - name: Terraform Destroy
         if: ${{ inputs.action == 'destroy' }}
-        run: terraform destroy -auto-approve
+        run: terraform destroy -input=false -auto-approve
