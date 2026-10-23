@@ -1,5 +1,5 @@
-# Exposes car-service at https://car.digitalwitch.online
-# Requires a Namecheap CNAME record: car -> NGINX load balancer hostname
+# Exposes car-service at https://car.bfithub.store
+# Requires a DNS CNAME record: car -> NGINX load balancer hostname
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -13,10 +13,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - car.digitalwitch.online
+        - car.bfithub.store
       secretName: car-service-tls
   rules:
-    - host: car.digitalwitch.online
+    - host: car.bfithub.store
       http:
         paths:
           - path: /
